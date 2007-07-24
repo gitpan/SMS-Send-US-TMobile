@@ -4,11 +4,15 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.1');
+use version; our $VERSION = qv('0.0.2');
 
 use LWP::UserAgent;
 use URI::Escape;
 use base 'SMS::Send::Driver';
+
+sub new {
+   return bless {}, shift;	
+}
 
 sub send_sms {
 	my ($self, %args) = @_;
@@ -18,9 +22,9 @@ sub send_sms {
 		'trackResponses' => 'No',
 		'Send.x'         => 'Yes',
 		'DOMAIN_NAME'    => '@tmomail.com',
-	    'min'            => $args{'to'},    # To: maxlength 10 digits
-	    'require_sender' => $args{'_from'}, # From: prepended to 'text', seperated by '/'
-	    'text'           => $args{'text'},  # message 'text'
+	    'min'            => $args{'to'}    || '', # To: maxlength 10 digits
+	    'require_sender' => $args{'_from'} || '', # From: prepended to 'text', seperated by '/'
+	    'text'           => $args{'text'}  || '', # message 'text'
 	    'msgTermsUse'    => 1,
 	    'Send'           => 1,
 	);
@@ -29,6 +33,7 @@ sub send_sms {
 	$params{'min'} =~ s{\D}{}g; # remove non-digits
 	
 	# validate
+	croak q{'_from' must be specified} if !$params{'require_sender'};
 	croak q{'to' must contain ten digits} if length $params{'min'} != 10;
 	croak q{'_from' and 'text' combined must not be more than 159 characters} 
 	    if length( $params{'require_sender'} ) +  length( $params{'text'} ) > 159;
@@ -49,25 +54,25 @@ sub send_sms {
 		# eval { die $res->as_string };
 		$@ = {
 			'args'       => \%args,
-			'caller'     => [ caller() ],
+			# essencially useless info at this point: 'caller'     => [ caller() ],
 			'url'        => $url,
 			'content'    => $content,
 			'is_success' => 1,
 			'as_string'  => $res->as_string,
 		};
-		return;
+		return 0; # bah! this is not cool but required or you get 'Driver did not return a result'
 	}
 	else {
 		# eval { die $res->as_string };
 		$@ = {
 			'args'       => \%args,
-			'caller'     => [ caller() ],
+			# essencially useless info at this point: 'caller'     => [ caller() ],
 			'url'        => $url,
 			'content'    => $content,
 			'is_success' => 0,
 			'as_string'  => $res->as_string,
 		};
-		return;
+		return 0; # bah! this is not cool but required or you get 'Driver did not return a result'
 	}
 }
 
@@ -102,6 +107,11 @@ Uses 'to' and 'text' as per L<SMS::Send> and additionally uses '_from' to prepen
 
 
 =head1 INTERFACE 
+
+=head2 new
+
+No extra agrgs, just
+  SMS::Send->new('US::TMobile');
 
 =head2 send_sms
 
