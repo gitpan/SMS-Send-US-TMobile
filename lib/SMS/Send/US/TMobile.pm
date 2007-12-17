@@ -4,10 +4,11 @@ use warnings;
 use strict;
 use Carp;
 
-use version; our $VERSION = qv('0.0.2');
+use version; our $VERSION = qv('0.0.3');
 
-use LWP::UserAgent;
+# use LWP::UserAgent;
 use URI::Escape;
+use Net::SSLeay;
 use base 'SMS::Send::Driver';
 
 sub new {
@@ -16,49 +17,58 @@ sub new {
 
 sub send_sms {
 	my ($self, %args) = @_;
-    my $url = 'https://wmg.tmomail.net/customer_site/jsp/messaging_lo.jsp';
+    my $url = 'https://web.mms.msg.t-mobile.com/smsportal/index.html'; # ?act=smsc&locale=en';
  
 	my %params = (
-		'trackResponses' => 'No',
-		'Send.x'         => 'Yes',
-		'DOMAIN_NAME'    => '@tmomail.com',
-	    'min'            => $args{'to'}    || '', # To: maxlength 10 digits
-	    'require_sender' => $args{'_from'} || '', # From: prepended to 'text', seperated by '/'
+	    'act'            => 'smsc',
+	    'locale'         => 'en',
+    #	'trackResponses' => 'No',
+    #	'Send.x'         => 'Yes',
+	#	'DOMAIN_NAME'    => '@tmomail.com',
+	    'receiver'       => $args{'to'}    || '', # To: maxlength 10 digits
+	    'sender'         => $args{'_from'} || '', # From: prepended to 'text', seperated by '/'
 	    'text'           => $args{'text'}  || '', # message 'text'
 	    'msgTermsUse'    => 1,
 	    'Send'           => 1,
 	);
 
 	# cleanup
-	$params{'min'} =~ s{\D}{}g; # remove non-digits
+	$params{'receiver'} =~ s{\D}{}g; # remove non-digits
 	
 	# validate
-	croak q{'_from' must be specified} if !$params{'require_sender'};
-	croak q{'to' must contain ten digits} if length $params{'min'} != 10;
+	croak q{'_from' must be specified} if !$params{'sender'};
+	croak q{'to' must contain ten digits} if length $params{'receiver'} != 10;
 	croak q{'_from' and 'text' combined must not be more than 159 characters} 
-	    if length( $params{'require_sender'} ) +  length( $params{'text'} ) > 159;
+	    if length( $params{'sender'} ) +  length( $params{'text'} ) > 159;
 	
 	# send away
-	my $content = join( '&', map { $_ . '=' . uri_escape( $params{ $_ } ) } keys %params );
+    my $uri = join( '&', map { $_ . '=' . uri_escape( $params{ $_ } ) } keys %params );
+ 
+#	my $ua = LWP::UserAgent->new;
+#   my $req = HTTP::Request->new( 'POST' => $url );
+#   $req->content_type('application/x-www-form-urlencoded');
+#   $req->content( $uri );
+#   my $res = $ua->request($req);
 
-	my $ua = LWP::UserAgent->new;
+    # must match $url above:
+    my ($content, $response, %reply_headers) = Net::SSLeay::post_https(
+        'web.mms.msg.t-mobile.com',
+        443,
+        '/smsportal/index.html',
+        '',
+        Net::SSLeay::make_form(%params), 
+    );
 
-    my $req = HTTP::Request->new( 'POST' => $url );
-    $req->content_type('application/x-www-form-urlencoded');
-    $req->content( $content );
-
-    my $res = $ua->request($req);
-
-    if( $res->is_success ) {
-		return 1 if $res->as_string =~ m{Your message has been delivered};
+    if ( $content ) { # if( $res->is_success ) {
+        return 1 if $content =~ m{Your message has been delivered}; # if $res->as_string =~ m{Your message has been delivered};
 		# eval { die $res->as_string };
 		$@ = {
 			'args'       => \%args,
 			# essencially useless info at this point: 'caller'     => [ caller() ],
 			'url'        => $url,
-			'content'    => $content,
+			'content'    => $uri,
 			'is_success' => 1,
-			'as_string'  => $res->as_string,
+			'as_string'  => $response, # $res->as_string,
 		};
 		return 0; # bah! this is not cool but required or you get 'Driver did not return a result'
 	}
@@ -68,9 +78,9 @@ sub send_sms {
 			'args'       => \%args,
 			# essencially useless info at this point: 'caller'     => [ caller() ],
 			'url'        => $url,
-			'content'    => $content,
+			'content'    => $uri,
 			'is_success' => 0,
-			'as_string'  => $res->as_string,
+			'as_string'  => $response, # $res->as_string,
 		};
 		return 0; # bah! this is not cool but required or you get 'Driver did not return a result'
 	}
@@ -82,11 +92,11 @@ __END__
 
 =head1 NAME
 
-SMS::Send::US::TMobile - SMS::Send driver for the wmg.tmomail.net website
+SMS::Send::US::TMobile - SMS::Send driver for the web.mms.msg.t-mobile.com website
 
 =head1 VERSION
 
-This document describes SMS::Send::US::TMobile version 0.0.1
+This document describes SMS::Send::US::TMobile version 0.0.3
 
 =head1 SYNOPSIS
 

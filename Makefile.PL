@@ -11,7 +11,7 @@ WriteMakefile(
     PREREQ_PM => {
         'Test::More'        => 0,
         'version'           => 0,
-        'LWP::UserAgent'    => 0,
+        'Net::SSLeay'       => 0,
         'URI::Escape'       => 0,
         'SMS::Send::Driver' => 0,
     },
